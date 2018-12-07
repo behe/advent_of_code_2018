@@ -56,6 +56,45 @@ defmodule Day2InventoryManagementSystemTest do
     end
   end
 
+  describe "part 2" do
+    test "common" do
+      assert ["abcde", "fghij", "klmno", "pqrst", "fguij", "axcye", "wvxyz"]
+             |> Enum.map(&String.split(&1, "", trim: true))
+             |> common == "fgij"
+    end
+
+    test "common with input" do
+      assert File.stream!("test/fixtures/day2.txt")
+             |> Stream.flat_map(&String.splitter(&1, "\n", trim: true))
+             |> Enum.map(&String.split(&1, "", trim: true))
+             |> common == "hhvsdkatysmiqjxunezgwcdpr"
+    end
+  end
+
+  defp common([head | tail]) do
+    Enum.find_value(tail, &common_string(head, &1, [], 0)) || common(tail)
+  end
+
+  defp common_string([], [], common, 1) do
+    Enum.reverse(common) |> Enum.join()
+  end
+
+  defp common_string([], [], _, _) do
+    nil
+  end
+
+  defp common_string([x | rest1], [x | rest2], common, i) do
+    common_string(rest1, rest2, [x | common], i)
+  end
+
+  defp common_string([_ | _], [_ | _], _, 1) do
+    nil
+  end
+
+  defp common_string([_ | rest1], [_ | rest2], common, 0) do
+    common_string(rest1, rest2, common, 1)
+  end
+
   defp repeats(x) do
     String.splitter(x, "", trim: true)
     |> repeat_count
