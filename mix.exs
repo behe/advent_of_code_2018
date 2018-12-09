@@ -7,7 +7,8 @@ defmodule AdventOfCode2018.MixProject do
       version: "0.1.0",
       elixir: "~> 1.7",
       start_permanent: Mix.env() == :prod,
-      deps: deps()
+      deps: deps(),
+      preferred_cli_env: ["test.watch": :test]
     ]
   end
 
@@ -16,7 +17,7 @@ defmodule AdventOfCode2018.MixProject do
   defp deps do
     [
       {:flow, "~> 0.14"},
-      {:mix_test_watch, "~> 0.9"}
+      {:mix_test_watch, "~> 0.9", only: :test, runtime: false}
     ]
   end
 end
