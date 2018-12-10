@@ -2,38 +2,6 @@ defmodule Day9Test do
   use ExUnit.Case
 
   describe "part 1" do
-    # test "" do
-    #   assert play(%{0 => {0, 0}}, 0, 0, 1, [0, 0, 0, 0, 0, 0, 0, 0, 0], 1) |> elem(0) == %{
-    #            0 => {1, 1},
-    #            1 => {0, 0}
-    #          }
-
-    #   assert play(
-    #            %{0 => {1, 1}, 1 => {0, 0}},
-    #            1,
-    #            1,
-    #            2,
-    #            [0, 0, 0, 0, 0, 0, 0, 0, 0],
-    #            2
-    #          )
-    #          |> elem(0) == %{0 => {1, 2}, 1 => {2, 0}, 2 => {0, 1}}
-
-    #   assert play(
-    #            %{0 => {1, 2}, 1 => {2, 0}, 2 => {0, 1}},
-    #            2,
-    #            2,
-    #            3,
-    #            [0, 0, 0, 0, 0, 0, 0, 0, 0],
-    #            3
-    #          )
-    #          |> elem(0) == %{
-    #            0 => {3, 2},
-    #            2 => {0, 1},
-    #            1 => {2, 3},
-    #            3 => {1, 0}
-    #          }
-    # end
-
     test "9 players; last marble is worth 23 points" do
       assert "9 players; last marble is worth 23 points\n"
              |> play() == 32
@@ -64,31 +32,6 @@ defmodule Day9Test do
              |> play() == 37305
     end
 
-    # test "next" do
-    #   assert next(%{0 => {0, 0}}, 0) == 0
-    #   assert next(%{0 => {1, 1}, 1 => {0, 0}}, 0) == 1
-    #   assert next(%{0 => {1, 1}, 1 => {0, 0}}, 1) == 0
-    #   assert next(%{0 => {1, 2}, 1 => {2, 0}, 2 => {0, 1}}, 2) == 1
-    #   assert next(%{0 => {1, 2}, 1 => {2, 0}, 2 => {0, 1}}, 0) == 2
-    # end
-
-    # test "insert_at" do
-    #   assert insert_at(%{0 => {0, 0}}, 0, 1) == %{0 => {1, 1}, 1 => {0, 0}}
-
-    #   assert insert_at(%{0 => {1, 1}, 1 => {0, 0}}, 0, 2) == %{
-    #            0 => {1, 2},
-    #            1 => {2, 0},
-    #            2 => {0, 1}
-    #          }
-
-    #   assert insert_at(%{0 => {1, 2}, 1 => {2, 0}, 2 => {0, 1}}, 1, 3) == %{
-    #            0 => {3, 2},
-    #            2 => {0, 1},
-    #            1 => {2, 3},
-    #            3 => {1, 0}
-    #          }
-    # end
-
     test "play with input" do
       assert File.read!("test/fixtures/day9.txt")
              |> play() == 434_674
@@ -102,25 +45,13 @@ defmodule Day9Test do
     end
   end
 
-  defp insert_at(current_marble, current_point) do
-    {_, next} = Process.get(current_marble)
-
-    Process.put(current_marble, {Process.get(current_marble) |> elem(0), current_point})
-    Process.put(next, {current_point, Process.get(next) |> elem(1)})
-    Process.put(current_point, {current_marble, next})
-  end
-
-  defp next(current_marble) do
-    {_, next} = Process.get(current_marble)
-    next
-  end
-
   defp play(input) do
     {players, last_marble} = parse(input)
 
-    Process.put(0, {0, 0})
+    state = :ets.new(:marbles, [])
+    :ets.insert(state, {0, {0, 0}})
 
-    play(%{0 => {0, 0}}, 0, 0, 1, for(_ <- 1..players, do: 0), last_marble)
+    play(state, 0, 0, 1, for(_ <- 1..players, do: 0), last_marble)
     |> Enum.max()
   end
 
@@ -133,12 +64,12 @@ defmodule Day9Test do
        when rem(current_point, 23) == 0 do
     score =
       Enum.reduce(1..7, current_marble, fn _, current_marble ->
-        {prev, _} = Process.get(current_marble)
+        [{_, {prev, _}}] = :ets.lookup(state, current_marble)
         prev
       end)
 
     player_scores = List.update_at(player_scores, current_player, &(&1 + score + current_point))
-    current_marble = pop_at(score)
+    current_marble = pop_at(state, score)
 
     play(
       state,
@@ -151,8 +82,8 @@ defmodule Day9Test do
   end
 
   defp play(state, current_marble, current_player, current_point, player_scores, last_marble) do
-    current_marble = next(current_marble)
-    insert_at(current_marble, current_point)
+    current_marble = next(state, current_marble)
+    insert_at(state, current_marble, current_point)
 
     play(
       state,
@@ -164,12 +95,28 @@ defmodule Day9Test do
     )
   end
 
-  defp pop_at(current_marble) do
-    {current_prev, current_next} = Process.get(current_marble)
+  defp next(state, current_marble) do
+    [{_, {_, next}}] = :ets.lookup(state, current_marble)
+    next
+  end
 
-    Process.put(current_next, {current_prev, Process.get(current_next) |> elem(1)})
-    Process.put(current_prev, {Process.get(current_prev) |> elem(0), current_next})
-    Process.delete(current_marble)
+  defp insert_at(state, current_marble, current_point) do
+    [{_, {prev, next}}] = :ets.lookup(state, current_marble)
+    :ets.insert(state, {current_marble, {prev, current_point}})
+
+    [{_, {_, next_next}}] = :ets.lookup(state, next)
+    :ets.insert(state, {next, {current_point, next_next}})
+    :ets.insert(state, {current_point, {current_marble, next}})
+  end
+
+  defp pop_at(state, current_marble) do
+    [{_, {current_prev, current_next}}] = :ets.lookup(state, current_marble)
+    [{_, {_, current_next_next}}] = :ets.lookup(state, current_next)
+    [{_, {current_prev_prev, _}}] = :ets.lookup(state, current_prev)
+
+    :ets.insert(state, {current_next, {current_prev, current_next_next}})
+    :ets.insert(state, {current_prev, {current_prev_prev, current_next}})
+    :ets.delete(state, current_marble)
 
     current_next
   end
