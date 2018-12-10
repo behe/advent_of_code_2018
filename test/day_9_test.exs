@@ -2,6 +2,38 @@ defmodule Day9Test do
   use ExUnit.Case
 
   describe "part 1" do
+    test "" do
+      assert play(%{0 => {0, 0}}, 0, 0, 1, [0, 0, 0, 0, 0, 0, 0, 0, 0], 1) |> elem(0) == %{
+               0 => {1, 1},
+               1 => {0, 0}
+             }
+
+      assert play(
+               %{0 => {1, 1}, 1 => {0, 0}},
+               1,
+               1,
+               2,
+               [0, 0, 0, 0, 0, 0, 0, 0, 0],
+               2
+             )
+             |> elem(0) == %{0 => {1, 2}, 1 => {2, 0}, 2 => {0, 1}}
+
+      assert play(
+               %{0 => {1, 2}, 1 => {2, 0}, 2 => {0, 1}},
+               2,
+               2,
+               3,
+               [0, 0, 0, 0, 0, 0, 0, 0, 0],
+               3
+             )
+             |> elem(0) == %{
+               0 => {3, 2},
+               2 => {0, 1},
+               1 => {2, 3},
+               3 => {1, 0}
+             }
+    end
+
     test "9 players; last marble is worth 23 points" do
       assert "9 players; last marble is worth 23 points\n"
              |> play() == 32
@@ -32,10 +64,29 @@ defmodule Day9Test do
              |> play() == 37305
     end
 
-    test "insert at" do
-      assert insert_at([0], 0) == 1
-      assert insert_at([0, 1], 1) == 1
-      assert insert_at([0, 2, 1], 1) == 3
+    test "next" do
+      assert next(%{0 => {0, 0}}, 0) == 0
+      assert next(%{0 => {1, 1}, 1 => {0, 0}}, 0) == 1
+      assert next(%{0 => {1, 1}, 1 => {0, 0}}, 1) == 0
+      assert next(%{0 => {1, 2}, 1 => {2, 0}, 2 => {0, 1}}, 2) == 1
+      assert next(%{0 => {1, 2}, 1 => {2, 0}, 2 => {0, 1}}, 0) == 2
+    end
+
+    test "insert_at" do
+      assert insert_at(%{0 => {0, 0}}, 0, 1) == %{0 => {1, 1}, 1 => {0, 0}}
+
+      assert insert_at(%{0 => {1, 1}, 1 => {0, 0}}, 0, 2) == %{
+               0 => {1, 2},
+               1 => {2, 0},
+               2 => {0, 1}
+             }
+
+      assert insert_at(%{0 => {1, 2}, 1 => {2, 0}, 2 => {0, 1}}, 1, 3) == %{
+               0 => {3, 2},
+               2 => {0, 1},
+               1 => {2, 3},
+               3 => {1, 0}
+             }
     end
 
     test "play with input" do
@@ -44,10 +95,36 @@ defmodule Day9Test do
     end
   end
 
+  describe "part 2" do
+    test "play with input" do
+      assert "404 players; last marble is worth 7185200 points"
+             |> play() == 3_653_994_575
+    end
+  end
+
+  defp insert_at(state, current_marble, current_point) do
+    {_, next} = Map.fetch!(state, current_marble)
+
+    state =
+      state
+      |> Map.update!(current_marble, fn {prev, _next} -> {prev, current_point} end)
+      |> Map.update!(next, fn {_prev, next} -> {current_point, next} end)
+      |> Map.put(current_point, {current_marble, next})
+
+    state
+  end
+
+  defp next(state, current_marble) do
+    {_, next} = Map.fetch!(state, current_marble)
+    next
+  end
+
   defp play(input) do
     {players, last_marble} = parse(input)
 
-    play([0], 0, 0, 1, for(_ <- 1..players, do: 0), last_marble) |> elem(1) |> Enum.max()
+    play(%{0 => {0, 0}}, 0, 0, 1, for(_ <- 1..players, do: 0), last_marble)
+    |> elem(1)
+    |> Enum.max()
   end
 
   defp play(state, _current_marble, _current_player, current_point, player_scores, last_marble)
@@ -57,16 +134,14 @@ defmodule Day9Test do
 
   defp play(state, current_marble, current_player, current_point, player_scores, last_marble)
        when rem(current_point, 23) == 0 do
-    # IO.inspect({current_player, length(player_scores)}, label: current_point)
-
-    current_marble = rem(length(state) + rem(current_marble - 7, length(state)), length(state))
-    # |> IO.inspect(label: :current_marble)
-
-    {score, state} = List.pop_at(state, current_marble)
-    #  |> IO.inspect(label: :state)
+    score =
+      Enum.reduce(1..7, current_marble, fn _, current_marble ->
+        {prev, _} = Map.fetch!(state, current_marble)
+        prev
+      end)
 
     player_scores = List.update_at(player_scores, current_player, &(&1 + score + current_point))
-    # |> IO.inspect(label: :player_scores)
+    {current_marble, state} = pop_at(state, score)
 
     play(
       state,
@@ -79,11 +154,12 @@ defmodule Day9Test do
   end
 
   defp play(state, current_marble, current_player, current_point, player_scores, last_marble) do
-    current_marble = insert_at(state, current_marble)
+    current_marble = next(state, current_marble)
+    state = insert_at(state, current_marble, current_point)
 
     play(
-      List.insert_at(state, current_marble, current_point),
-      current_marble,
+      state,
+      current_point,
       rem(current_player + 1, length(player_scores)),
       current_point + 1,
       player_scores,
@@ -91,10 +167,16 @@ defmodule Day9Test do
     )
   end
 
-  defp insert_at(state, current_marble) do
-    with 0 <- rem(current_marble + 2, length(state)) do
-      length(state)
-    end
+  defp pop_at(state, current_marble) do
+    {current_prev, current_next} = Map.fetch!(state, current_marble)
+
+    state =
+      state
+      |> Map.update!(current_next, fn {_prev, next} -> {current_prev, next} end)
+      |> Map.update!(current_prev, fn {prev, _next} -> {prev, current_next} end)
+      |> Map.delete(current_marble)
+
+    {current_next, state}
   end
 
   defp parse(input) do
