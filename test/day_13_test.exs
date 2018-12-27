@@ -132,8 +132,13 @@ defmodule Day13Test do
                %{{7, 4} => {"^", :left}, {7, 2} => {"v", :right}}
     end
 
-    test "tick 14" do
+    test "crash when second moves into first cart" do
       assert tick(@tracks, %{{7, 4} => {"^", :left}, {7, 2} => {"v", :right}}) ==
+               {7, 3}
+    end
+
+    test "crash when first moves into second cart" do
+      assert tick(@tracks, %{{7, 3} => {"^", :left}, {7, 2} => {"v", :right}}) ==
                {7, 3}
     end
 
@@ -144,6 +149,160 @@ defmodule Day13Test do
     test "first crash with input" do
       assert first_crash(File.read!("test/fixtures/day13.txt")) == {33, 69}
     end
+  end
+
+  @part2_input """
+  />-<\\
+  |   |
+  | /<+-\\
+  | | | v
+  \\>+</ |
+    |   ^
+    \\<->/
+  """
+  @part2_tracks %{
+    {0, 0} => "/",
+    {0, 1} => "|",
+    {0, 2} => "|",
+    {0, 3} => "|",
+    {0, 4} => "\\",
+    {1, 0} => "-",
+    {1, 4} => "-",
+    {2, 0} => "-",
+    {2, 2} => "/",
+    {2, 3} => "|",
+    {2, 4} => "+",
+    {2, 5} => "|",
+    {2, 6} => "\\",
+    {3, 0} => "-",
+    {3, 2} => "-",
+    {3, 4} => "-",
+    {3, 6} => "-",
+    {4, 0} => "\\",
+    {4, 1} => "|",
+    {4, 2} => "+",
+    {4, 3} => "|",
+    {4, 4} => "/",
+    {4, 6} => "-",
+    {5, 2} => "-",
+    {5, 6} => "-",
+    {6, 2} => "\\",
+    {6, 3} => "|",
+    {6, 4} => "|",
+    {6, 5} => "|",
+    {6, 6} => "/"
+  }
+  describe "part 2" do
+    test "parse" do
+      assert parse(@part2_input) ==
+               {@part2_tracks,
+                %{
+                  {1, 0} => {">", :left},
+                  {3, 0} => {"<", :left},
+                  {3, 2} => {"<", :left},
+                  {6, 3} => {"v", :left},
+                  {1, 4} => {">", :left},
+                  {3, 4} => {"<", :left},
+                  {6, 5} => {"^", :left},
+                  {3, 6} => {"<", :left},
+                  {5, 6} => {">", :left}
+                }}
+    end
+
+    test "tock 1" do
+      assert tock(@part2_tracks, %{
+               {1, 0} => {">", :left},
+               {3, 0} => {"<", :left},
+               {3, 2} => {"<", :left},
+               {6, 3} => {"v", :left},
+               {1, 4} => {">", :left},
+               {3, 4} => {"<", :left},
+               {6, 5} => {"^", :left},
+               {3, 6} => {"<", :left},
+               {5, 6} => {">", :left}
+             }) == %{
+               {2, 2} => {"v", :left},
+               {2, 6} => {"^", :left},
+               {6, 6} => {"^", :left}
+             }
+    end
+
+    test "tock 2" do
+      assert tock(@part2_tracks, %{
+               {2, 2} => {"v", :left},
+               {2, 6} => {"^", :left},
+               {6, 6} => {"^", :left}
+             }) ==
+               %{{2, 3} => {"v", :left}, {2, 5} => {"^", :left}, {6, 5} => {"^", :left}}
+    end
+
+    test "crash when second moves into first cart" do
+      assert tock(@part2_tracks, %{
+               {2, 3} => {"v", :left},
+               {2, 5} => {"^", :left},
+               {6, 5} => {"^", :left}
+             }) ==
+               %{{6, 4} => {"^", :left}}
+    end
+
+    test "crash when first moves into second cart" do
+      assert tock(@part2_tracks, %{
+               {2, 4} => {"v", :left},
+               {2, 5} => {"^", :left},
+               {6, 5} => {"^", :left}
+             }) ==
+               %{{6, 4} => {"^", :left}}
+    end
+
+    test "last cart" do
+      assert last_cart(@part2_input) == {6, 4}
+    end
+
+    test "last cart with input" do
+      assert last_cart(File.read!("test/fixtures/day13.txt")) == {135, 9}
+    end
+  end
+
+  defp last_cart(input) do
+    {tracks, carts} = parse(input)
+    last_cart(tracks, carts)
+  end
+
+  defp last_cart(_tracks, carts) when map_size(carts) == 1 do
+    Map.keys(carts) |> hd
+  end
+
+  defp last_cart(tracks, carts) do
+    last_cart(tracks, tock(tracks, carts))
+  end
+
+  defp tock(tracks, carts) do
+    carts
+    |> Enum.sort_by(fn {{x, y}, _} -> {y, x} end)
+    |> Enum.reduce_while({carts, []}, fn
+      {{x, y} = coord, {heading, next_direction}}, {carts, crashed_coords} ->
+        # IO.inspect({coord, crashed_coords})
+        # IO.inspect({{x, y}, {heading, next_direction}})
+        if coord in crashed_coords do
+          {:cont, {carts, crashed_coords}}
+        else
+          next_coord =
+            case heading do
+              "<" -> {x - 1, y}
+              ">" -> {x + 1, y}
+              "v" -> {x, y + 1}
+              "^" -> {x, y - 1}
+            end
+
+          if Map.has_key?(carts, next_coord) do
+            {:cont, {Map.drop(carts, [coord, next_coord]), [next_coord | crashed_coords]}}
+          else
+            {:cont,
+             {move(tracks, carts, {x, y}, next_coord, heading, next_direction), crashed_coords}}
+          end
+        end
+    end)
+    |> elem(0)
   end
 
   defp first_crash(input) do
